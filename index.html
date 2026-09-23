@@ -381,6 +381,9 @@ const state = {
   index: 0,
   correct: 0,
   answered: 0,
+  reasonChecked: false,
+  reasonFeedback: '',
+  reasonSelection: '',
   active: false
 };
 
@@ -482,17 +485,43 @@ function renderQuestion() {
   const item = currentItem();
   if (!item) return;
 
-  const mode = document.getElementById('mode').value;
-  const { vyraz, rod, anglicky } = item.row;
+  const { vyraz, rod } = item.row;
 
   let displayWord = vyraz;
-  let displayTranslation = anglicky;
 
   if (item.adjective) {
     displayWord = adjForm(item.adjective.cs, rod) + ' ' + vyraz;
-    displayTranslation = item.adjective.en + ' ' + (anglicky || '');
   }
   document.getElementById('word').textContent = displayWord;
+
+  updateModePresentation(item);
+
+  const dd = document.getElementById('dropdownAnswer');
+  dd.value = '';
+  document.getElementById('feedback').textContent = '';
+  document.getElementById('feedback').className = 'feedback info';
+  document.getElementById('reasonArea').classList.add('hidden');
+  document.getElementById('explanation').classList.add('hidden');
+  document.getElementById('reasonAnswer').disabled = false;
+  document.getElementById('checkReasonBtn').disabled = false;
+  document.getElementById('nextBtn').classList.add('hidden');
+  document.getElementById('checkBtn').disabled = false;
+  document.getElementById('skipBtn').disabled = false;
+  dd.disabled = false;
+  state.reasonChecked = false;
+  state.reasonFeedback = '';
+  state.reasonSelection = '';
+
+  updateStats();
+  updateProgress();
+}
+
+function updateModePresentation(item) {
+  const mode = document.getElementById('mode').value;
+  const { anglicky } = item.row;
+  const displayTranslation = item.adjective
+    ? item.adjective.en + ' ' + (anglicky || '')
+    : anglicky;
 
   const transEl = document.getElementById('translation');
   if (mode === 'easy' && displayTranslation) {
@@ -511,21 +540,6 @@ function renderQuestion() {
     dd.options[2].text = 'Ženský rod';
     dd.options[3].text = 'Střední rod';
   }
-
-  dd.value = '';
-  document.getElementById('feedback').textContent = '';
-  document.getElementById('feedback').className = 'feedback info';
-  document.getElementById('reasonArea').classList.add('hidden');
-  document.getElementById('explanation').classList.add('hidden');
-  document.getElementById('reasonAnswer').disabled = false;
-  document.getElementById('checkReasonBtn').disabled = false;
-  document.getElementById('nextBtn').classList.add('hidden');
-  document.getElementById('checkBtn').disabled = false;
-  document.getElementById('skipBtn').disabled = false;
-  dd.disabled = false;
-
-  updateStats();
-  updateProgress();
 }
 
 function updateStats() {
@@ -606,6 +620,12 @@ function showReason(item) {
     F_E: ['F_CE','F_ICE','N_ISTE','MEMORIZE'], MEMORIZE: ['F_E','M_CONSONANT','F_A','N_I']
   };
   shuffle([rule, ...neighbors[rule]]).forEach(id => select.add(new Option(RULES[id][0], id)));
+  select.value = state.reasonSelection;
+  select.disabled = state.reasonChecked;
+  document.getElementById('checkReasonBtn').disabled = state.reasonChecked;
+  explanation.textContent = state.reasonFeedback;
+  explanation.classList.toggle('hidden', !state.reasonChecked);
+  document.getElementById('nextBtn').classList.toggle('hidden', !state.reasonChecked);
 }
 
 function checkReason() {
@@ -616,6 +636,9 @@ function checkReason() {
   const explanation = document.getElementById('explanation');
   explanation.textContent = (select.value === rule ? '✓ Correct. ' : '✗ The rule here is: ') +
     RULES[rule][0] + '. ' + RULES[rule][1];
+  state.reasonChecked = true;
+  state.reasonSelection = select.value;
+  state.reasonFeedback = explanation.textContent;
   explanation.classList.remove('hidden');
   select.disabled = true;
   document.getElementById('checkReasonBtn').disabled = true;
@@ -638,7 +661,6 @@ function finish() {
   document.getElementById('skipBtn').disabled = true;
   document.getElementById('nextBtn').classList.add('hidden');
   document.getElementById('reasonArea').classList.add('hidden');
-  document.getElementById('mode').disabled = false;
   state.active = false;
   updateProgress();
 }
@@ -653,7 +675,6 @@ document.getElementById('startBtn').addEventListener('click', () => {
     return;
   }
   state.active = true;
-  document.getElementById('mode').disabled = true;
   document.getElementById('checkBtn').disabled = false;
   document.getElementById('skipBtn').disabled = false;
   renderQuestion();
@@ -671,7 +692,9 @@ document.getElementById('skipBtn').addEventListener('click', () => {
 });
 
 document.getElementById('mode').addEventListener('change', () => {
-  if (state.active && currentItem()) renderQuestion();
+  if (!state.active || !currentItem()) return;
+  updateModePresentation(currentItem());
+  if (document.getElementById('checkBtn').disabled) showReason(currentItem());
 });
 
 // ---------- Boot ----------
