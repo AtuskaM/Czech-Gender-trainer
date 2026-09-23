@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Czech Gender Trainer</title>
+<style>
+  :root {
+    --bg: #f4f1ea;
+    --card: #ffffff;
+    --ink: #1f1b16;
+    --muted: #6b6257;
+    --line: #d9d2c5;
+    --accent: #8b3a2f;
+    --ok: #2e7d32;
+    --bad: #c62828;
+    --shadow: 0 2px 12px rgba(0,0,0,0.08);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 18px;
+    line-height: 1.5;
+  }
+  .wrap {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 24px 16px 64px;
+  }
+  h1 {
+    font-size: 1.6rem;
+    margin: 0 0 4px;
+    letter-spacing: 0.02em;
+  }
+  .subtitle {
+    color: var(--muted);
+    font-size: 0.95rem;
+    margin-bottom: 24px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 24px;
+    box-shadow: var(--shadow);
+    margin-bottom: 16px;
+  }
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+  }
+  .controls label {
+    display: block;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  select, button {
+    font-family: inherit;
+    font-size: 1rem;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--ink);
+    width: 100%;
+  }
+  button {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+    transition: opacity 0.15s;
+  }
+  button:hover { opacity: 0.9; }
+  button.secondary {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    font-weight: 500;
+  }
+  button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .question {
+    text-align: center;
+    padding: 32px 0 24px;
+  }
+  .word {
+    font-size: 2.6rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    margin-bottom: 8px;
+  }
+  .translation {
+    font-size: 1.1rem;
+    color: var(--muted);
+    font-style: italic;
+    min-height: 1.4em;
+  }
+  .answer-area {
+    margin-top: 8px;
+  }
+  .feedback {
+    margin-top: 16px;
+    padding: 12px;
+    border-radius: 6px;
+    text-align: center;
+    font-weight: 600;
+    min-height: 1.6em;
+  }
+  .feedback.ok { background: #e8f5e9; color: var(--ok); }
+  .feedback.bad { background: #ffebee; color: var(--bad); }
+  .feedback.info { background: #f0f0f0; color: var(--muted); font-weight: 400; }
+  .stats {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9rem;
+    color: var(--muted);
+    margin-top: 12px;
+  }
+  .hint {
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-top: 8px;
+    text-align: center;
+  }
+  textarea {
+    width: 100%;
+    height: 120px;
+    font-family: monospace;
+    font-size: 0.85rem;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 8px;
+  }
+  .hidden { display: none; }
+  .progress {
+    height: 4px;
+    background: var(--line);
+    border-radius: 2px;
+    margin-top: 16px;
+    overflow: hidden;
+  }
+  .progress-bar {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.3s;
+  }
+  @media (max-width: 560px) {
+    .controls { grid-template-columns: 1fr; }
+    .word { font-size: 2rem; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Czech Gender Trainer</h1>
+  <div class="subtitle">Rod podstatných jmen / Noun gender</div>
+
+  <div id="loadPanel" class="card">
+    <p style="margin-top:0"><strong>Loading data…</strong></p>
+    <p class="hint" id="loadStatus">If this takes more than a few seconds, paste the TSV data below.</p>
+    <textarea id="pasteArea" placeholder="Výraz&#9;Rod&#9;Úroveň&#9;Anglicky&#10;muž&#9;maskulinum&#9;1&#9;man&#10;…"></textarea>
+    <button id="loadPaste" style="margin-top:8px">Paste data</button>
+    <p class="hint">Or place <code>czech_gender_data.tsv</code> next to this file and reload.</p>
+  </div>
+
+  <div id="trainer" class="hidden">
+    <div class="card">
+      <div class="controls">
+        <div>
+          <label for="mode">Mode</label>
+          <select id="mode">
+            <option value="easy">Easy</option>
+            <option value="normal" selected>Normal</option>
+          </select>
+        </div>
+        <div>
+          <label for="level">Level</label>
+          <select id="level">
+            <option value="1">1 — M consonant / F -a / N -o</option>
+            <option value="2">2 — M and F in -a</option>
+            <option value="3">3 — M and F in -e</option>
+            <option value="4">4 — all genders in -e</option>
+            <option value="5">5 — M and F in consonant</option>
+            <option value="6">6 — the -í trap</option>
+            <option value="7">7 — full mix</option>
+            <option value="8">8 — pluralia tantum</option>
+            <option value="9">9 — special cases</option>
+            <option value="10">10 — substantivized adjectives</option>
+          </select>
+        </div>
+        <div>
+          <label for="order">Order</label>
+          <select id="order">
+            <option value="shuffle">Shuffled</option>
+            <option value="seq">In order</option>
+          </select>
+        </div>
+      </div>
+      <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
+      <div class="stats">
+        <span id="statLeft">0 left</span>
+        <span id="statScore">0 / 0 correct</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="question">
+        <div class="word" id="word">—</div>
+        <div class="translation" id="translation"></div>
+      </div>
+
+      <div class="answer-area">
+        <select id="dropdownAnswer">
+          <option value="">— choose —</option>
+          <option value="maskulinum">Mužský rod / Masculine</option>
+          <option value="femininum">Ženský rod / Feminine</option>
+          <option value="neutrum">Střední rod / Neuter</option>
+        </select>
+
+        <div class="feedback info" id="feedback">Press Start to begin.</div>
+
+        <div style="display:flex; gap:8px; margin-top:12px">
+          <button id="startBtn">Start</button>
+          <button id="checkBtn" class="secondary" disabled>Check</button>
+          <button id="skipBtn" class="secondary" disabled>Skip</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ============================================================
+// Czech Gender Trainer — logic
+// ============================================================
+
+// 40 adjectives with English translations (nominative singular)
+const ADJECTIVES = [
+  { cs: 'velký',    en: 'big' },
+  { cs: 'malý',     en: 'small' },
+  { cs: 'dobrý',    en: 'good' },
+  { cs: 'špatný',   en: 'bad' },
+  { cs: 'nový',     en: 'new' },
+  { cs: 'starý',    en: 'old' },
+  { cs: 'mladý',    en: 'young' },
+  { cs: 'český',    en: 'Czech' },
+  { cs: 'slovenský',en: 'Slovak' },
+  { cs: 'krásný',   en: 'beautiful' },
+  { cs: 'drahý',    en: 'expensive' },
+  { cs: 'levný',    en: 'cheap' },
+  { cs: 'teplý',    en: 'warm' },
+  { cs: 'studený',  en: 'cold' },
+  { cs: 'dlouhý',   en: 'long' },
+  { cs: 'krátký',   en: 'short' },
+  { cs: 'těžký',    en: 'heavy' },
+  { cs: 'lehký',    en: 'light' },
+  { cs: 'silný',    en: 'strong' },
+  { cs: 'slabý',    en: 'weak' },
+  { cs: 'rychlý',   en: 'fast' },
+  { cs: 'pomalý',   en: 'slow' },
+  { cs: 'veselý',   en: 'cheerful' },
+  { cs: 'smutný',   en: 'sad' },
+  { cs: 'čistý',    en: 'clean' },
+  { cs: 'špinavý',  en: 'dirty' },
+  { cs: 'modrý',    en: 'blue' },
+  { cs: 'červený',  en: 'red' },
+  { cs: 'zelený',   en: 'green' },
+  { cs: 'bílý',     en: 'white' },
+  { cs: 'černý',    en: 'black' },
+  { cs: 'žlutý',    en: 'yellow' },
+  { cs: 'horký',    en: 'hot' },
+  { cs: 'sladký',   en: 'sweet' },
+  { cs: 'slaný',    en: 'salty' },
+  { cs: 'tvrdý',    en: 'hard' },
+  { cs: 'měkký',    en: 'soft' },
+  { cs: 'suchý',    en: 'dry' },
+  { cs: 'mokrý',    en: 'wet' },
+  { cs: 'zajímavý', en: 'interesting' }
+];
+
+function adjForm(adj, rod) {
+  const stem = adj.replace(/ý$/, '');
+  if (rod === 'maskulinum') return stem + 'ý';
+  if (rod === 'femininum') return stem + 'á';
+  return stem + 'é';
+}
+
+const SCAFFOLD_LEVELS = new Set(['2','3','4','5','6']);
+
+const state = {
+  data: [],
+  queue: [],
+  index: 0,
+  correct: 0,
+  answered: 0,
+  active: false
+};
+
+// ---------- Data loading ----------
+
+async function loadTSV() {
+  try {
+    const res = await fetch('czech_gender_data.tsv');
+    if (!res.ok) throw new Error('not found');
+    const text = await res.text();
+    parseAndStart(text);
+    document.getElementById('loadPanel').classList.add('hidden');
+    document.getElementById('trainer').classList.remove('hidden');
+  } catch (e) {
+    document.getElementById('loadStatus').innerHTML =
+      'Could not auto-load the file. Paste the TSV data below.';
+  }
+}
+
+function parseAndStart(text) {
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  const lines = text.replace(/\r/g,'').split('\n').filter(l => l.trim().length > 0);
+  const rows = [];
+  for (let i = 0; i < lines.length; i++) {
+    const parts = lines[i].split('\t');
+    if (i === 0 && parts[0].toLowerCase().includes('výraz')) continue;
+    if (parts.length < 4) continue;
+    const vyraz = parts[0].trim();
+    const rod = parts[1].trim().toLowerCase();
+    const uroven = parts[2].trim();
+    const anglicky = parts[3].trim();
+    if (!vyraz || !rod || !uroven) continue;
+    rows.push({ vyraz, rod, uroven, anglicky });
+  }
+  state.data = rows;
+  document.getElementById('loadPanel').classList.add('hidden');
+  document.getElementById('trainer').classList.remove('hidden');
+  document.getElementById('statLeft').textContent = rows.length + ' words loaded';
+}
+
+document.getElementById('loadPaste').addEventListener('click', () => {
+  const text = document.getElementById('pasteArea').value;
+  if (!text.trim()) return;
+  parseAndStart(text);
+});
+
+// ---------- Building the queue ----------
+
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function buildQueue() {
+  const level = document.getElementById('level').value;
+  const order = document.getElementById('order').value;
+
+  let rows;
+  if (level === '7') {
+    rows = state.data.slice();
+  } else {
+    rows = state.data.filter(r => r.uroven === level);
+  }
+
+  const seen = new Set();
+  rows = rows.filter(r => {
+    const k = r.vyraz + '|' + r.uroven + '|' + r.rod;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+
+  if (order === 'shuffle') shuffle(rows);
+
+  const needScaffold = SCAFFOLD_LEVELS.has(level);
+  state.queue = rows.map((row, i) => {
+    const withAdj = needScaffold && i < 30;
+    return {
+      row,
+      adjective: withAdj ? ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)] : null
+    };
+  });
+
+  state.index = 0;
+  state.correct = 0;
+  state.answered = 0;
+}
+
+// ---------- Display ----------
+
+function currentItem() {
+  return state.queue[state.index];
+}
+
+function renderQuestion() {
+  const item = currentItem();
+  if (!item) return;
+
+  const mode = document.getElementById('mode').value;
+  const { vyraz, rod, anglicky } = item.row;
+
+  let displayWord = vyraz;
+  let displayTranslation = anglicky;
+
+  if (item.adjective) {
+    displayWord = adjForm(item.adjective.cs, rod) + ' ' + vyraz;
+    displayTranslation = item.adjective.en + ' ' + (anglicky || '');
+  }
+  document.getElementById('word').textContent = displayWord;
+
+  const transEl = document.getElementById('translation');
+  if (mode === 'easy' && displayTranslation) {
+    transEl.textContent = '— ' + displayTranslation.trim();
+  } else {
+    transEl.textContent = '';
+  }
+
+  const dd = document.getElementById('dropdownAnswer');
+  if (mode === 'easy') {
+    dd.options[1].text = 'Mužský rod / Masculine';
+    dd.options[2].text = 'Ženský rod / Feminine';
+    dd.options[3].text = 'Střední rod / Neuter';
+  } else {
+    dd.options[1].text = 'Mužský rod';
+    dd.options[2].text = 'Ženský rod';
+    dd.options[3].text = 'Střední rod';
+  }
+
+  dd.value = '';
+  document.getElementById('feedback').textContent = '';
+  document.getElementById('feedback').className = 'feedback info';
+
+  updateStats();
+  updateProgress();
+}
+
+function updateStats() {
+  const left = state.queue.length - state.index;
+  document.getElementById('statLeft').textContent = left + ' left';
+  document.getElementById('statScore').textContent =
+    state.correct + ' / ' + state.answered + ' correct';
+}
+
+function updateProgress() {
+  const pct = state.queue.length ? (state.index / state.queue.length) * 100 : 0;
+  document.getElementById('progressBar').style.width = pct + '%';
+}
+
+// ---------- Answer checking ----------
+
+function normalize(rod) {
+  const r = rod.toLowerCase().trim();
+  if (r === 'm' || r === 'm.' || r === 'maskulinum' || r === 'mužský rod') return 'maskulinum';
+  if (r === 'ž' || r === 'z' || r === 'ž.' || r === 'femininum' || r === 'ženský rod') return 'femininum';
+  if (r === 's' || r === 'n' || r === 's.' || r === 'neutrum' || r === 'střední rod') return 'neutrum';
+  return r;
+}
+
+function check() {
+  const item = currentItem();
+  if (!item) return;
+
+  const answer = normalize(document.getElementById('dropdownAnswer').value);
+  if (!answer) return;
+
+  const correct = item.row.rod;
+  const fb = document.getElementById('feedback');
+
+  state.answered++;
+  if (answer === correct) {
+    state.correct++;
+    fb.textContent = '✓ Správně / Correct';
+    fb.className = 'feedback ok';
+  } else {
+    fb.textContent = '✗ Špatně / Wrong — correct is: ' + correct;
+    fb.className = 'feedback bad';
+  }
+
+  updateStats();
+
+  setTimeout(() => {
+    state.index++;
+    if (state.index >= state.queue.length) {
+      finish();
+    } else {
+      renderQuestion();
+    }
+  }, answer === correct ? 700 : 1500);
+}
+
+function finish() {
+  const fb = document.getElementById('feedback');
+  fb.textContent = 'Done! Score: ' + state.correct + ' / ' + state.answered;
+  fb.className = 'feedback info';
+  document.getElementById('word').textContent = '—';
+  document.getElementById('translation').textContent = '';
+  document.getElementById('checkBtn').disabled = true;
+  document.getElementById('skipBtn').disabled = true;
+  state.active = false;
+  updateProgress();
+}
+
+// ---------- Buttons ----------
+
+document.getElementById('startBtn').addEventListener('click', () => {
+  buildQueue();
+  if (!state.queue.length) {
+    document.getElementById('feedback').textContent =
+      'No words found for this level. Check your data file.';
+    return;
+  }
+  state.active = true;
+  document.getElementById('checkBtn').disabled = false;
+  document.getElementById('skipBtn').disabled = false;
+  renderQuestion();
+});
+
+document.getElementById('checkBtn').addEventListener('click', check);
+
+document.getElementById('skipBtn').addEventListener('click', () => {
+  const item = currentItem();
+  if (!item) return;
+  state.answered++;
+  state.index++;
+  if (state.index >= state.queue.length) finish();
+  else { updateStats(); renderQuestion(); }
+});
+
+document.getElementById('mode').addEventListener('change', () => {
+  if (state.active && currentItem()) renderQuestion();
+});
+
+// ---------- Boot ----------
+
+loadTSV();
+</script>
+</body>
+</html>
