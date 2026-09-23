@@ -90,6 +90,8 @@
     opacity: 0.4;
     cursor: not-allowed;
   }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .actions button { flex: 1 1 125px; }
   .question {
     text-align: center;
     padding: 32px 0 24px;
@@ -109,6 +111,15 @@
   .answer-area {
     margin-top: 8px;
   }
+  .reason-area {
+    margin-top: 16px;
+    padding: 16px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+  }
+  .reason-area label { display: block; margin-bottom: 8px; font-weight: 600; }
+  .reason-area button { margin-top: 10px; }
+  .explanation { margin: 10px 0 0; }
   .feedback {
     margin-top: 16px;
     padding: 12px;
@@ -232,10 +243,18 @@
 
         <div class="feedback info" id="feedback">Press Start to begin.</div>
 
-        <div style="display:flex; gap:8px; margin-top:12px">
+        <div class="reason-area hidden" id="reasonArea">
+          <label for="reasonAnswer" id="reasonTitle">Why?</label>
+          <select id="reasonAnswer"></select>
+          <button id="checkReasonBtn" class="secondary">Check reason</button>
+          <p class="explanation hidden" id="explanation"></p>
+        </div>
+
+        <div class="actions">
           <button id="startBtn">Start</button>
           <button id="checkBtn" class="secondary" disabled>Check</button>
           <button id="skipBtn" class="secondary" disabled>Skip</button>
+          <button id="nextBtn" class="secondary hidden">Next</button>
         </div>
       </div>
     </div>
@@ -301,6 +320,61 @@ function adjForm(adj, rod) {
 
 const SCAFFOLD_LEVELS = new Set(['2','3','4','5','6']);
 
+// Ordered learner rules. The word's recorded gender is authoritative; an ending
+// only earns a rule when it agrees with that gender.
+const RULES = {
+  ADJ_Y: ['Adjective used as a noun: -ý → masculine', 'This noun has the masculine adjective ending -ý.'],
+  ADJ_A: ['Adjective used as a noun: -á → feminine', 'This noun has the feminine adjective ending -á.'],
+  ADJ_E: ['Adjective used as a noun: -é → neuter', 'This noun has the neuter adjective ending -é.'],
+  NATURAL: ['Natural gender of a person', 'This word denotes a person; the person’s gender determines the answer in this exercise.'],
+  F_OST: ['-ost → feminine', 'Nouns ending in -ost are normally feminine.'],
+  F_ICE: ['-ice → feminine', 'Nouns ending in -ice are normally feminine.'],
+  N_ISTE: ['-iště → neuter', 'Nouns ending in -iště are neuter.'],
+  N_UM: ['-um / -ium → neuter', 'This -um / -ium noun is neuter.'],
+  N_MA: ['Greek-origin -ma → neuter', 'Greek-origin nouns such as téma and drama are neuter.'],
+  F_CE: ['-ce → feminine', 'Most inanimate nouns ending in -ce are feminine. Learn neuter exceptions such as vejce and srdce separately.'],
+  M_CONSONANT: ['Consonant → usually masculine', 'A noun ending in a consonant is usually masculine; feminine exceptions must be learned.'],
+  F_A: ['-a → usually feminine', 'A noun ending in -a is usually feminine, except male persons and some special nouns.'],
+  N_O: ['-o → neuter', 'A noun ending in -o is normally neuter.'],
+  N_I: ['-í → usually neuter', 'A noun ending in long -í is normally neuter; words for people may differ.'],
+  F_E: ['Other -e / -ě → feminine', 'Many other nouns ending in -e / -ě are feminine; common neuters must be learned.'],
+  MEMORIZE: ['Needs memorization', 'The basic ending rules do not determine this noun’s gender reliably. Learn the word together with its gender (for example, to moře).']
+};
+
+const MALE_A = new Set('turista starosta předseda táta specialista policista fotbalista hokejista ateista buddhista optimista pesimista stážista'.split(' '));
+const MALE_E = new Set('soudce průvodce vůdce vládce dárce správce obhájce zástupce příjemce důchodce'.split(' '));
+const MALE_I = new Set('krejčí vedoucí cestující vrchní průvodčí'.split(' '));
+const OTHER_ADJECTIVAL_NOUNS = new Set('dovolená nemocenská červená oranžová zelená svíčková'.split(' '));
+
+function ruleFor(row) {
+  const word = row.vyraz.toLowerCase();
+  const gender = row.rod;
+  // Plural-only nouns have no nominative singular ending to apply these rules to.
+  if (row.uroven === '8') return 'MEMORIZE';
+  if (row.uroven === '10' || OTHER_ADJECTIVAL_NOUNS.has(word)) {
+    if (word.endsWith('ý') && gender === 'maskulinum') return 'ADJ_Y';
+    if (word.endsWith('á') && gender === 'femininum') return 'ADJ_A';
+    if (word.endsWith('é') && gender === 'neutrum') return 'ADJ_E';
+  }
+  if ((gender === 'maskulinum' && (MALE_A.has(word) || MALE_E.has(word) || MALE_I.has(word))) ||
+      (gender === 'femininum' && word === 'paní')) return 'NATURAL';
+  if (word.endsWith('ost') && gender === 'femininum') return 'F_OST';
+  if (word.endsWith('ice') && gender === 'femininum') return 'F_ICE';
+  if (word.endsWith('iště') && gender === 'neutrum') return 'N_ISTE';
+  if (word.endsWith('um') && gender === 'neutrum') return 'N_UM';
+  if (word.endsWith('ma') && gender === 'neutrum') return 'N_MA';
+  if (word.endsWith('ce') && gender === 'femininum') return 'F_CE';
+  if (word.endsWith('o') && gender === 'neutrum') return 'N_O';
+  if (word.endsWith('a') && gender === 'femininum') return 'F_A';
+  if (word.endsWith('í') && gender === 'neutrum') return 'N_I';
+  if (word.endsWith('e') || word.endsWith('ě')) {
+    if (gender === 'femininum') return 'F_E';
+    return 'MEMORIZE';
+  }
+  if (gender === 'maskulinum' && /[^aeěáéíýo]$/u.test(word) && !word.includes(' ')) return 'M_CONSONANT';
+  return 'MEMORIZE';
+}
+
 const state = {
   data: [],
   queue: [],
@@ -332,13 +406,13 @@ function parseAndStart(text) {
   const rows = [];
   for (let i = 0; i < lines.length; i++) {
     const parts = lines[i].split('\t');
-    if (i === 0 && parts[0].toLowerCase().includes('výraz')) continue;
+    if (parts[0].trim().toLowerCase() === 'výraz') continue;
     if (parts.length < 4) continue;
     const vyraz = parts[0].trim();
     const rod = parts[1].trim().toLowerCase();
     const uroven = parts[2].trim();
     const anglicky = parts[3].trim();
-    if (!vyraz || !rod || !uroven) continue;
+    if (!vyraz || !['maskulinum', 'femininum', 'neutrum'].includes(rod) || !uroven) continue;
     rows.push({ vyraz, rod, uroven, anglicky });
   }
   state.data = rows;
@@ -441,6 +515,14 @@ function renderQuestion() {
   dd.value = '';
   document.getElementById('feedback').textContent = '';
   document.getElementById('feedback').className = 'feedback info';
+  document.getElementById('reasonArea').classList.add('hidden');
+  document.getElementById('explanation').classList.add('hidden');
+  document.getElementById('reasonAnswer').disabled = false;
+  document.getElementById('checkReasonBtn').disabled = false;
+  document.getElementById('nextBtn').classList.add('hidden');
+  document.getElementById('checkBtn').disabled = false;
+  document.getElementById('skipBtn').disabled = false;
+  dd.disabled = false;
 
   updateStats();
   updateProgress();
@@ -470,7 +552,7 @@ function normalize(rod) {
 
 function check() {
   const item = currentItem();
-  if (!item) return;
+  if (!state.active || !item || document.getElementById('checkBtn').disabled) return;
 
   const answer = normalize(document.getElementById('dropdownAnswer').value);
   if (!answer) return;
@@ -489,15 +571,61 @@ function check() {
   }
 
   updateStats();
+  document.getElementById('checkBtn').disabled = true;
+  document.getElementById('skipBtn').disabled = true;
+  document.getElementById('dropdownAnswer').disabled = true;
+  showReason(item);
+}
 
-  setTimeout(() => {
-    state.index++;
-    if (state.index >= state.queue.length) {
-      finish();
-    } else {
-      renderQuestion();
-    }
-  }, answer === correct ? 700 : 1500);
+function showReason(item) {
+  const rule = ruleFor(item.row);
+  const area = document.getElementById('reasonArea');
+  const select = document.getElementById('reasonAnswer');
+  const explanation = document.getElementById('explanation');
+  const easy = document.getElementById('mode').value === 'easy';
+  area.classList.remove('hidden');
+  document.getElementById('reasonTitle').textContent = easy ? 'Why?' : 'Why does this noun have this gender?';
+  select.classList.toggle('hidden', easy);
+  document.getElementById('checkReasonBtn').classList.toggle('hidden', easy);
+  if (easy) {
+    explanation.textContent = RULES[rule][0] + '. ' + RULES[rule][1];
+    explanation.classList.remove('hidden');
+    document.getElementById('nextBtn').classList.remove('hidden');
+    return;
+  }
+  select.replaceChildren(new Option('— choose a rule —', ''));
+  // Keep the choice manageable, with plausible rules and the correct one.
+  const neighbors = {
+    ADJ_Y: ['ADJ_A','ADJ_E','N_I','N_O'], ADJ_A: ['ADJ_Y','ADJ_E','F_A','N_MA'],
+    ADJ_E: ['ADJ_Y','ADJ_A','N_ISTE','MEMORIZE'], NATURAL: ['F_A','F_CE','N_I','MEMORIZE'],
+    F_OST: ['M_CONSONANT','F_ICE','F_CE','MEMORIZE'], F_ICE: ['F_A','F_OST','N_ISTE','MEMORIZE'],
+    N_ISTE: ['F_E','F_ICE','F_CE','MEMORIZE'], N_UM: ['M_CONSONANT','N_O','N_MA','MEMORIZE'],
+    N_MA: ['F_A','N_UM','N_O','MEMORIZE'], F_CE: ['F_ICE','F_A','N_ISTE','MEMORIZE'],
+    M_CONSONANT: ['F_OST','F_A','N_UM','MEMORIZE'], F_A: ['N_MA','ADJ_A','N_O','MEMORIZE'],
+    N_O: ['F_A','N_UM','N_I','MEMORIZE'], N_I: ['N_O','ADJ_Y','N_ISTE','MEMORIZE'],
+    F_E: ['F_CE','F_ICE','N_ISTE','MEMORIZE'], MEMORIZE: ['F_E','M_CONSONANT','F_A','N_I']
+  };
+  shuffle([rule, ...neighbors[rule]]).forEach(id => select.add(new Option(RULES[id][0], id)));
+}
+
+function checkReason() {
+  if (!state.active || document.getElementById('reasonArea').classList.contains('hidden')) return;
+  const select = document.getElementById('reasonAnswer');
+  if (!select.value || select.disabled) return;
+  const rule = ruleFor(currentItem().row);
+  const explanation = document.getElementById('explanation');
+  explanation.textContent = (select.value === rule ? '✓ Correct. ' : '✗ The rule here is: ') +
+    RULES[rule][0] + '. ' + RULES[rule][1];
+  explanation.classList.remove('hidden');
+  select.disabled = true;
+  document.getElementById('checkReasonBtn').disabled = true;
+  document.getElementById('nextBtn').classList.remove('hidden');
+}
+
+function nextQuestion() {
+  state.index++;
+  if (state.index >= state.queue.length) finish();
+  else renderQuestion();
 }
 
 function finish() {
@@ -508,6 +636,9 @@ function finish() {
   document.getElementById('translation').textContent = '';
   document.getElementById('checkBtn').disabled = true;
   document.getElementById('skipBtn').disabled = true;
+  document.getElementById('nextBtn').classList.add('hidden');
+  document.getElementById('reasonArea').classList.add('hidden');
+  document.getElementById('mode').disabled = false;
   state.active = false;
   updateProgress();
 }
@@ -522,20 +653,21 @@ document.getElementById('startBtn').addEventListener('click', () => {
     return;
   }
   state.active = true;
+  document.getElementById('mode').disabled = true;
   document.getElementById('checkBtn').disabled = false;
   document.getElementById('skipBtn').disabled = false;
   renderQuestion();
 });
 
 document.getElementById('checkBtn').addEventListener('click', check);
+document.getElementById('checkReasonBtn').addEventListener('click', checkReason);
+document.getElementById('nextBtn').addEventListener('click', nextQuestion);
 
 document.getElementById('skipBtn').addEventListener('click', () => {
   const item = currentItem();
   if (!item) return;
   state.answered++;
-  state.index++;
-  if (state.index >= state.queue.length) finish();
-  else { updateStats(); renderQuestion(); }
+  nextQuestion();
 });
 
 document.getElementById('mode').addEventListener('change', () => {
