@@ -92,14 +92,18 @@ const REASONS = {
   M_PERSON_HARD: 'It is a person or animal and ends in a hard consonant.',
   M_PERSON_SOFT: 'It is a person or animal and ends in a soft consonant.',
   M_PERSON_TEL: 'It names a male person and ends in -tel.',
+  M_PERSON_LEARN: 'It names a male person; this model must be memorized.',
   M_PERSON_A: 'It names a male person and ends in -a.',
   M_PERSON_CE: 'It names a male person and ends in -ce.',
   M_THING_HARD: 'It is a thing and ends in a hard consonant.',
   M_THING_SOFT: 'It is a thing and ends in a soft consonant.',
+  M_THING_LEARN: 'It is a thing; this soft model is an exception to memorize.',
   F_A: 'It ends in -a.',
   F_ICE: 'It ends in -ice and in -e.',
   F_CE: 'It ends in -ce and in -e.',
-  F_E_LEARN: 'Learn that it is feminine; it ends in -e.',
+  F_YNE: 'It ends in -yně and in -ě.',
+  F_IE: 'It ends in -ie and in -e.',
+  F_E_LEARN: 'Learn that it is feminine; it ends in -e or -ě.',
   F_SOFT: 'It is a feminine word ending in a soft consonant.',
   F_PISEN_LEARN: 'Its feminine gender and píseň model must be memorized.',
   F_OST: 'It ends in -ost.',
@@ -125,7 +129,7 @@ const SETS = [
   ['femininum','růže','F_CE','práce restaurace informace injekce'],
   ['femininum','růže','F_E_LEARN','židle chvíle večeře snídaně'],
   ['femininum','píseň','F_SOFT','báseň třešeň skříň předsíň povodeň'],
-  ['femininum','píseň','F_PISEN_LEARN','postel mrkev'],
+  ['femininum','píseň','F_PISEN_LEARN','postel mrkev petržel'],
   ['femininum','kost','F_OST','kost radost bolest společnost bezpečnost starost'],
   ['femininum','kost','F_KOST_LEARN','věc řeč nemoc'],
   ['neutrum','město','N_O','město okno auto kolo jablko pivo víno maso jezero divadlo'],
@@ -135,6 +139,73 @@ const SETS = [
   ['neutrum','kuře','N_KURE_LEARN','zvíře rajče doupě koště poupě'],
   ['neutrum','stavení','N_I','stavení bydlení náměstí nádraží narození pití oblečení']
 ];
+
+// The larger collection uses only the basic patterns. People and animals are
+// listed explicitly so a masculine noun cannot be called a "thing" by mistake.
+const ANIMATE = new Set(`muž student učitel doktor přítel bratr otec syn pes
+adresát advokát asistent cizinec číšník člověk dědeček dělník farmář
+gynekolog hasič herec holič host hudebník chlapec informatik kamarád kluk
+kuchař lékárník lékař manžel Mongol nájemník novinář odesílatel opravář pan
+podnikatel pojištěnec právník prezident prodavač profesor režisér rodič Rus
+ředitel řemeslník řidič soused spisovatel sportovec strýc tatínek technik
+tlumočník Ukrajinec umělec úředník Vietnamec začátečník zaměstnanec
+zaměstnavatel zedník zpěvák zubař žák básník běloch bratranec brigádník
+černoch člen čtenář diabetik diskžokej divák docent druh elektrikář fanoušek
+chirurg instalatér jednatel kadeřník kardiolog katolík křesťan kůň kapr
+listonoš lyžař majitel makléř malíř ministr muslim občan obchodník
+ošetřovatel partner pojišťovatel politik poslanec prarodič primátor psychiatr
+revizor řezník senátor senior sochař sourozenec svědek školník švagr tchán
+trenér vdovec veterinář závodník zeť překladatel kadeřník zaměstnavatel
+obchodník restauratér soudce průvodce vůdce vládce dárce správce obhájce
+zástupce příjemce důchodce turista starosta předseda táta specialista
+policista fotbalista hokejista ateista buddhista optimista pesimista stážista`.split(/\s+/));
+
+const EXCLUDE = new Set('chleba den hmyz model kotel pardon úterý'.split(' '));
+const N_MORE_LEARN = new Set('moře pole nebe lože poledne dopoledne odpoledne srdce vejce slunce ovoce citoslovce příslovce'.split(' '));
+const N_KURE_LEARN = new Set('zvíře rajče doupě koště poupě paraple šuple'.split(' '));
+const N_BABIES = new Set('kuře dítě štěně tele sele mládě kotě'.split(' '));
+const SOFT_FINAL = /[cčďjňřšťž]$/u;
+const HARD_FINAL = /[bdfghklmnprstvxz]$/u;
+
+function inferBasicModel(word, source) {
+  const {gender, level}=source;
+  if (['8','9','10'].includes(level) || EXCLUDE.has(word) || word.includes(' ')) return null;
+  const w=word.toLowerCase();
+  if (gender==='femininum') {
+    if (w.endsWith('a')) return ['žena','F_A'];
+    if (w.endsWith('ice')) return ['růže','F_ICE'];
+    if (w.endsWith('ce')) return ['růže','F_CE'];
+    if (w.endsWith('yně')) return ['růže','F_YNE'];
+    if (w.endsWith('ie')) return ['růže','F_IE'];
+    if (w.endsWith('e') || w.endsWith('ě')) return ['růže','F_E_LEARN'];
+    if (w.endsWith('ost')) return ['kost','F_OST'];
+    return null; // Other feminine consonant words need an individual review.
+  }
+  if (gender==='neutrum') {
+    if (w.endsWith('iště')) return ['moře','N_ISTE'];
+    if (N_BABIES.has(w)) return ['kuře','N_BABY'];
+    if (N_KURE_LEARN.has(w)) return ['kuře','N_KURE_LEARN'];
+    if (N_MORE_LEARN.has(w)) return ['moře','N_E_LEARN'];
+    if (w.endsWith('o')) return ['město','N_O'];
+    if (w.endsWith('í')) return ['stavení','N_I'];
+    return null;
+  }
+  if (gender==='maskulinum') {
+    if (w.endsWith('a') && ANIMATE.has(word)) return ['předseda','M_PERSON_A'];
+    if (w.endsWith('ce') && ANIMATE.has(word)) return ['soudce','M_PERSON_CE'];
+    if (ANIMATE.has(word)) {
+      if (w.endsWith('tel')) return ['muž','M_PERSON_TEL'];
+      if (word==='manžel') return ['muž','M_PERSON_LEARN'];
+      if (SOFT_FINAL.test(w)) return ['muž','M_PERSON_SOFT'];
+      if (HARD_FINAL.test(w)) return ['pán','M_PERSON_HARD'];
+      return null;
+    }
+    if (word==='kašel') return ['stroj','M_THING_LEARN'];
+    if (SOFT_FINAL.test(w)) return ['stroj','M_THING_SOFT'];
+    if (HARD_FINAL.test(w)) return ['hrad','M_THING_HARD'];
+  }
+  return null;
+}
 
 const MODEL_ORDER = ['pán','muž','předseda','soudce','hrad','stroj','žena','růže','píseň','kost','město','moře','kuře','stavení'];
 const ADJECTIVES = [ ['malý','small'], ['nový','new'], ['starý','old'], ['velký','big'], ['český','Czech'] ];
@@ -272,8 +343,8 @@ async function loadWords() {
     const lines=(await response.text()).replace(/\r/g,'').split('\n');
     const lookup=new Map();
     for(const line of lines) {
-      const [word,gender,,english]=line.split('\t');
-      if(word && ['maskulinum','femininum','neutrum'].includes(gender) && !lookup.has(word)) lookup.set(word,{gender,english});
+      const [word,gender,level,english]=line.split('\t');
+      if(word && ['maskulinum','femininum','neutrum'].includes(gender) && !lookup.has(word)) lookup.set(word,{gender,level,english});
     }
     const words=[]; const seen=new Set();
     for(const [gender,model,reason,names] of SETS) for(const word of names.split(' ')) {
@@ -281,9 +352,18 @@ async function loadWords() {
       if(!source || source.gender!==gender || !REASONS[reason] || seen.has(word)) throw new Error('Review model entry: '+word);
       seen.add(word); words.push({word,gender,model,reason,english:source.english});
     }
+    for(const [word,source] of lookup) {
+      if(seen.has(word)) continue;
+      const found=inferBasicModel(word,source);
+      if(!found) continue;
+      const [model,reason]=found;
+      seen.add(word); words.push({word,gender:source.gender,model,reason,english:source.english});
+    }
     state.words=words;
     $('start').disabled=false; $('start').textContent='Start practice';
-    $('loadMessage').textContent=`${words.length} checked words from the gender trainer.`;
+    const counts={maskulinum:0,femininum:0,neutrum:0};
+    words.forEach(x=>counts[x.gender]++);
+    $('loadMessage').textContent=`${words.length} words from the gender trainer: ${counts.maskulinum} masculine, ${counts.femininum} feminine, ${counts.neutrum} neuter. Words with uncertain or special models are left out.`;
   } catch(error) { $('loadMessage').textContent='Could not load the words. Please reload this page. '+error.message; }
 }
 loadWords();
