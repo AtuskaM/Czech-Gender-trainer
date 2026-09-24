@@ -56,7 +56,7 @@
   <section id="welcome" class="card">
     <h2>How to play</h2>
     <p>For each word, answer <strong>all three questions</strong>: choose its gender, choose its model, and choose one simple reason that explains both. Then press <strong>Check</strong>. Nothing is marked until you have answered all three.</p>
-    <p><strong>Easy</strong> shows an adjective with the noun and its English meaning. <strong>Normal</strong> shows only the noun. You can switch modes during a level.</p>
+    <p><strong>Easy</strong> shows an adjective with the noun and its English meaning. <strong>Normal</strong> shows only the noun. You can switch modes during a level. <strong>Shuffle</strong> mixes the words you have not finished; <strong>Skip</strong> moves past a word without scoring it.</p>
     <div class="settings">
       <div><label for="level">Level</label><select id="level"><option value="maskulinum">Masculine</option><option value="femininum">Feminine</option><option value="neutrum">Neuter</option><option value="mixed">Mixed</option></select></div>
       <div><label for="mode">Mode</label><select id="mode"><option value="easy">Easy</option><option value="normal" selected>Normal</option></select></div>
@@ -82,7 +82,7 @@
         <div class="question-row"><label for="reason">3. Why do both answers fit?</label><select id="reason"></select><div id="reasonResult" class="result hidden"></div></div>
       </div>
       <div id="summary" class="hidden" aria-live="polite"></div>
-      <div class="actions"><button id="check" disabled>Check all three</button><button id="next" class="hidden">Next word</button></div>
+      <div class="actions"><button id="check" disabled>Check all three</button><button id="next" class="hidden">Next word</button><button id="skip" class="secondary">Skip</button><button id="shuffleRemaining" class="secondary">Shuffle</button></div>
     </div>
   </section>
 </main>
@@ -210,7 +210,7 @@ function inferBasicModel(word, source) {
 const MODEL_ORDER = ['pán','muž','předseda','soudce','hrad','stroj','žena','růže','píseň','kost','město','moře','kuře','stavení'];
 const ADJECTIVES = [ ['malý','small'], ['nový','new'], ['starý','old'], ['velký','big'], ['český','Czech'] ];
 const $ = id => document.getElementById(id);
-const state = { words:[], queue:[], index:0, score:0, checked:false };
+const state = { words:[], queue:[], index:0, score:0, skipped:0, checked:false };
 
 const ruleHTML = `
   <div class="rules"><h2>Rules you can use</h2>
@@ -283,6 +283,7 @@ function showWord() {
   ['gender','model','reason'].forEach(id=>{ $(id).disabled=false; $(id+'Result').textContent=''; $(id+'Result').className='result hidden'; });
   $('summary').classList.add('hidden'); $('summary').textContent='';
   $('check').classList.remove('hidden'); $('check').disabled=true; $('next').classList.add('hidden');
+  $('skip').classList.remove('hidden'); $('shuffleRemaining').classList.remove('hidden');
 }
 function checkAll() {
   if (state.checked || !$('gender').value || !$('model').value || !$('reason').value) return;
@@ -301,7 +302,8 @@ function checkAll() {
   $('scoreText').textContent=`${state.score} completely correct`;
   $('summary').textContent=passed===3?'All three correct.':`${passed} of 3 correct. ${item.word}: ${item.gender}, ${item.model}. ${REASONS[item.reason]}`;
   $('summary').classList.remove('hidden');
-  $('check').classList.add('hidden'); $('next').classList.remove('hidden'); $('next').focus();
+  $('check').classList.add('hidden'); $('next').classList.remove('hidden');
+  $('skip').classList.add('hidden'); $('shuffleRemaining').classList.add('hidden'); $('next').focus();
 }
 function next() {
   state.index++;
@@ -309,14 +311,30 @@ function next() {
   $('progressText').textContent='Level complete';
   $('bar').style.width='100%';
   $('word').textContent='Finished!'; $('translation').textContent='';
-  $('summary').textContent=`${state.score} of ${state.queue.length} words completely correct.`;
+  $('summary').textContent=`${state.score} of ${state.queue.length} words completely correct; ${state.skipped} skipped.`;
   $('summary').classList.remove('hidden');
   document.querySelector('.questions').classList.add('hidden');
   $('next').classList.add('hidden');
+  $('skip').classList.add('hidden'); $('shuffleRemaining').classList.add('hidden');
+}
+function skipWord() {
+  if (state.checked) return;
+  state.skipped++;
+  next();
+}
+function shuffleRemaining() {
+  if (state.checked) return;
+  const remaining=state.queue.slice(state.index);
+  if (remaining.length<2) return;
+  const previous=remaining[0];
+  shuffle(remaining);
+  if (remaining[0]===previous) [remaining[0],remaining[1]]=[remaining[1],remaining[0]];
+  state.queue.splice(state.index,remaining.length,...remaining);
+  showWord();
 }
 function start() {
   state.queue=shuffle(state.words.filter(x=>$('level').value==='mixed' || x.gender===$('level').value).map(x=>({...x,adjective:ADJECTIVES[Math.floor(Math.random()*ADJECTIVES.length)]})));
-  state.index=0; state.score=0;
+  state.index=0; state.score=0; state.skipped=0;
   document.querySelector('.questions').classList.remove('hidden');
   $('welcome').classList.add('hidden'); $('game').classList.remove('hidden');
   $('hintRules').classList.add('hidden'); $('hint').textContent='Show rules / Hint'; $('hint').setAttribute('aria-expanded','false');
@@ -329,6 +347,8 @@ function start() {
 $('start').addEventListener('click',start);
 $('check').addEventListener('click',checkAll);
 $('next').addEventListener('click',next);
+$('skip').addEventListener('click',skipWord);
+$('shuffleRemaining').addEventListener('click',shuffleRemaining);
 $('mode').addEventListener('change',()=>{ if(!$('game').classList.contains('hidden')) updateMode(); });
 $('hint').addEventListener('click',()=>{
   const open=$('hintRules').classList.toggle('hidden')===false;
