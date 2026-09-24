@@ -102,6 +102,8 @@
     letter-spacing: 0.01em;
     margin-bottom: 8px;
   }
+  .spoken-word { display: flex; justify-content: center; align-items: center; gap: 10px; }
+  button.speak { width: auto; min-width: 48px; min-height: 48px; padding: 6px 10px; font-size: 1.25rem; }
   .translation {
     font-size: 1.1rem;
     color: var(--muted);
@@ -230,7 +232,7 @@
 
     <div class="card">
       <div class="question">
-        <div class="word" id="word">—</div>
+        <div class="spoken-word"><div class="word" id="word">—</div><button id="speakBtn" class="secondary speak" type="button" aria-label="Hear the Czech word" title="Hear the Czech word" disabled>🔊</button></div>
         <div class="translation" id="translation"></div>
       </div>
 
@@ -482,7 +484,26 @@ function currentItem() {
   return state.queue[state.index];
 }
 
+function stopSpeaking() {
+  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+}
+
+function speakCurrentWord() {
+  const item = state.active && currentItem();
+  if (!item || !('speechSynthesis' in window)) return;
+  stopSpeaking();
+  const utterance = new SpeechSynthesisUtterance(item.row.vyraz);
+  utterance.lang = 'cs-CZ';
+  utterance.rate = 0.85;
+  const voices = window.speechSynthesis.getVoices();
+  const czechVoice = voices.find(voice => voice.lang.toLowerCase() === 'cs-cz') ||
+    voices.find(voice => voice.lang.toLowerCase().startsWith('cs'));
+  if (czechVoice) utterance.voice = czechVoice;
+  window.speechSynthesis.speak(utterance);
+}
+
 function renderQuestion() {
+  stopSpeaking();
   const item = currentItem();
   if (!item) return;
 
@@ -494,6 +515,7 @@ function renderQuestion() {
     displayWord = adjForm(item.adjective.cs, rod) + ' ' + vyraz;
   }
   document.getElementById('word').textContent = displayWord;
+  document.getElementById('speakBtn').disabled = !('speechSynthesis' in window);
 
   updateModePresentation(item);
 
@@ -653,10 +675,12 @@ function nextQuestion() {
 }
 
 function finish() {
+  stopSpeaking();
   const fb = document.getElementById('feedback');
   fb.textContent = 'Done! Score: ' + state.correct + ' / ' + state.answered;
   fb.className = 'feedback info';
   document.getElementById('word').textContent = '—';
+  document.getElementById('speakBtn').disabled = true;
   document.getElementById('translation').textContent = '';
   document.getElementById('checkBtn').disabled = true;
   document.getElementById('skipBtn').disabled = true;
@@ -684,6 +708,7 @@ document.getElementById('startBtn').addEventListener('click', () => {
 document.getElementById('checkBtn').addEventListener('click', check);
 document.getElementById('checkReasonBtn').addEventListener('click', checkReason);
 document.getElementById('nextBtn').addEventListener('click', nextQuestion);
+document.getElementById('speakBtn').addEventListener('click', speakCurrentWord);
 
 document.getElementById('skipBtn').addEventListener('click', () => {
   const item = currentItem();
